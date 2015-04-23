@@ -1,0 +1,473 @@
+#Mackenzie Smith
+#Projection Replication 
+#Econ 520
+
+##After running entire code, the equations to get main data tables for regressions are at the bottom####
+##-------------##--------------##---------------####
+
+
+
+###Data Calculations----------------------------###
+
+#Downlaod data
+Data1 <- read.csv(file="TaipeiData.csv",head=TRUE,sep=",")
+Data2<-Data1
+Data3<-Data1
+Data1<- Data1[!(Data1$window30==0),]
+Data1$month<-NULL
+Data1$month2<-NULL
+
+#Create new Data.Frame with only relevant data
+DataH<- Data1[,c("lCO", "lNOx", "lO3", "opl1", "weekid")]
+Const<- rep(c(1), each=1416) 
+DataH$Const<-Const
+
+#Create Data.Frame for each Y variable
+DataCO<- DataH[, c("lCO", "opl1","Const","weekid")]
+DataNO<- DataH[, c("lNOx", "opl1", "Const","weekid")]
+DataO<- DataH[, c("lO3", "opl1", "Const","weekid")]
+
+#Omit all NA Values
+str(DataCO)
+complete.cases(DataCO)
+DataCO<- na.omit(DataCO)
+str(DataNO)
+complete.cases(DataNO)
+DataNO<- na.omit(DataNO)
+str(DataO)
+complete.cases(DataO)
+DataO<- na.omit(DataO)
+
+#Create Y Vectors
+Y.CO<- as.matrix(DataCO$lCO)
+Y.NO<- as.matrix(DataNO$lNOx)
+Y.O<- as.matrix(DataO$lO3)
+
+
+
+###REGRESSION 1------------------------lCO-----------------------------------------------------------
+
+X.CO<- as.matrix(cbind(1,DataCO$opl1))
+colnames(X.CO, do.NULL = FALSE)
+colnames(X.CO) <- c("Const","MetroOpen")
+
+#Solve for b
+X<-(t(X.CO)%*%(X.CO)) 
+i.CO<-solve(t(X.CO)%*%(X.CO)) 
+b.CO<-(i.CO)%*%((t(X.CO)%*%Y.CO))
+b.hat.CO<- as.data.frame(cbind(c("Const", "MetroOpen"), b.CO))
+names(b.hat.CO)<- c("Coeff.", "Est")
+b.hat.CO
+
+#-----------------Solve for Clustered Standard Errors
+
+#get residuals
+res.CO=as.matrix(Y.CO-b.CO[1]-b.CO[2]*DataCO$opl1) 
+n=nrow(DataCO)
+k=ncol(X.CO)
+
+#create matrix for looping 
+cluster<- "weekid"
+clus<- cbind(X.CO, DataCO$weekid,res.CO)
+colnames(clus)<- c("lCO", "opl1","weekid", "res")
+
+#number of clusters
+m<- dim(table(clus[,cluster]))
+
+#adjust degrees of freedom for clusters
+dfc<- (m/(m-1))*((n-1)/(n-k))
+
+uclust<- matrix(NA, nrow=m, ncol=k)
+gs<- names(table(DataCO$weekid))
+for(i in 1:m){
+  uclust[i,]<- t(matrix(clus[clus[,cluster]==gs[i], k+2])) %*% clus[clus[,cluster]==gs[i], 1:k]
+}
+Mid<-(t(uclust) %*% uclust)
+clust.se<-((i.CO %*% Mid %*% i.CO)* dfc)
+
+#St. Err, P.Value 
+St.Err.C<-sqrt(diag(clust.se))
+P.Val.C = rbind(2*pt(abs(b.CO[1]/St.Err.C[1]), dfc,lower.tail= FALSE),
+                2*pt(abs(b.CO[2]/St.Err.C[2]), dfc,lower.tail= FALSE))
+b.hat.CO= cbind(b.hat.CO, St.Err.C, P.Val.C)
+names(b.hat.CO)<- c("Coeff.", "Est", "St.Err", "P-Value")
+b.hat.CO
+
+#Find R-Sq and Adjusted R-Squared
+y.h.CO<- mean(Y.CO)
+SSR.CO<- sum(res.CO^2)
+SST.CO<-sum((Y.CO-y.h.CO)^2)
+R.SQ.CO<-1-(SSR.CO/SST.CO)
+ADJ.R.SQ.CO<- 1-(((SSR.CO)/(n-k))/((SST.CO)/(n-1)))
+R.SQ.CO
+ADJ.R.SQ.CO
+
+
+
+###REGRESSION 2---------------------lNO----------------------------------------------------------------------------
+
+X.NO<- as.matrix(cbind(1,DataNO$opl1))
+colnames(X.NO, do.NULL = FALSE)
+colnames(X.NO) <- c("Const","MetroOpen")
+
+#Table for lNO
+i.NO<-solve(t(X.NO)%*%(X.NO)) 
+b.NO<-(i.NO)%*%((t(X.NO)%*%Y.NO))
+b.hat.NO<- as.data.frame(cbind(c("Const", "MetroOpen"), b.NO))
+names(b.hat.NO)<- c("Coeff.", "Est")
+b.hat.NO
+
+res.NO=as.matrix(Y.NO-b.NO[1]-b.NO[2]*DataNO$opl1)
+n.NO=nrow(DataNO)
+k.NO=ncol(X.NO)
+
+#create matrix for looping 
+cluster<- "weekid"
+clus.NO<- cbind(X.NO, DataNO$weekid,res.NO)
+colnames(clus.NO)<- c("lNO", "opl1","weekid", "res")
+
+#number of clusters
+m.NO<- dim(table(clus.NO[,cluster]))
+
+#Adjust degrees of freedom for clusters
+dfc.NO<- (m.NO/(m.NO-1))*((n.NO-1)/(n.NO-k.NO))
+
+uclust.NO<- matrix(NA, nrow=m.NO, ncol=k.NO)
+gs.NO<- names(table(DataNO$weekid))
+for(i in 1:m){
+  uclust.NO[i,]<- t(matrix(clus.NO[clus.NO[,cluster]==gs.NO[i], k.NO+2])) %*% clus.NO[clus.NO[,cluster]==gs.NO[i], 1:k.NO]
+}
+Mid.NO<-(t(uclust.NO) %*% uclust.NO)
+clust.se.NO<-((i.NO %*% Mid.NO %*% i.NO)* dfc.NO)
+
+St.Err.NO<-sqrt(diag(clust.se.NO))
+P.Val.NO = rbind(2*pt(abs(b.NO[1]/St.Err.NO[1]), dfc.NO,lower.tail= FALSE),
+                2*pt(abs(b.NO[2]/St.Err.NO[2]), dfc.NO,lower.tail= FALSE))
+b.hat.NO= cbind(b.hat.NO, St.Err.NO, P.Val.NO)
+names(b.hat.NO)<- c("Coeff.", "Est", "St.Err", "P-Value")
+b.hat.NO
+
+#Find R-Sq
+y.h1<- mean(Y.NO)
+SSR.NO<- sum(res.NO^2)
+SST.NO<- sum((Y.NO-y.h1)^2)
+R.SQ.NO<-1-(SSR.NO/SST.NO)
+ADJ.R.SQ.NO<- 1-(((SSR.NO)/(n.NO-k.NO))/((SST.NO)/(n.NO-1)))
+R.SQ.NO
+ADJ.R.SQ.NO
+
+##REGRESSION 3--------------------------lO3----------------------------------------------------------------------------------------------
+
+X.O<- as.matrix(cbind(1,DataO$opl1))
+colnames(X.O, do.NULL = FALSE)
+colnames(X.O) <- c("Const","MetroOpen")
+
+#Table for O3
+i.O<-solve(t(X.O)%*%(X.O)) 
+b.O<-(i.O)%*%((t(X.O)%*%Y.O))
+b.hat.O<- as.data.frame(cbind(c("Const", "MetroOpen"), b.O))
+names(b.hat.O)<- c("Coeff.", "Est")
+b.hat.O
+
+res.O=as.matrix(Y.O-b.O[1]-b.O[2]*DataO$opl1)
+n.O=nrow(DataO)
+k.O=ncol(X.O)
+
+#create matrix for looping 
+cluster<- "weekid"
+clus.O<- cbind(X.O, DataO$weekid,res.O)
+colnames(clus.O)<- c("lO", "opl1","weekid", "res")
+
+#number of clusters
+m.O<- dim(table(clus.O[,cluster]))
+
+#Adjust degrees of freedom for clusters
+dfc.O<- (m.O/(m.O-1))*((n.O-1)/(n.O-k.O))
+
+uclust.O<- matrix(NA, nrow=m.O, ncol=k.O)
+gs.O<- names(table(DataO$weekid))
+for(i in 1:m.O){
+  uclust.O[i,]<- t(matrix(clus.O[clus.O[,cluster]==gs.O[i], k.O+2])) %*% clus.O[clus.O[,cluster]==gs.O[i], 1:k.O]
+}
+Mid.O<-(t(uclust.O) %*% uclust.O)
+clust.se.O<-((i.O %*% Mid.O %*% i.O)* dfc.O)
+
+St.Err.O<-sqrt(diag(clust.se.O))
+P.Val.O = rbind(2*pt(abs(b.O[1]/St.Err.O[1]), dfc.O,lower.tail= FALSE),
+                 2*pt(abs(b.O[2]/St.Err.O[2]), dfc.O,lower.tail= FALSE))
+b.hat.O= cbind(b.hat.O, St.Err.O, P.Val.O)
+names(b.hat.O)<- c("Coeff.", "Est", "St.Err", "P-Value")
+b.hat.O
+
+#Find R-Sq
+y.h2<- mean(Y.O)
+SSR.O<- sum(res.O^2)
+SST.O<-sum((Y.O-y.h2)^2)
+R.SQ.O<-1-(SSR.O/SST.O)
+ADJ.R.SQ.O<- 1-(((SSR.O)/(n.O-k.O))/((SST.O)/(n.O-1)))
+R.SQ.O
+ADJ.R.SQ.O
+
+
+#--------------------------------New Regression------------------------------------#
+
+#Create new Data Frame
+Data2<-Data2[!(Data2$window30==0),]
+Data2<- Data2[,c("lCO", "lNOx", "lO3", "opl1", "weekid","wkend")]
+
+Const1<- rep(c(1), each=1416) 
+Data2$Const<-Const1
+
+DataCO1<- Data2[, c("lCO", "opl1","Const","weekid","wkend")]
+DataNO1<- Data2[, c("lNOx", "opl1", "Const","weekid","wkend")]
+DataO1<- Data2[, c("lO3", "opl1", "Const","weekid","wkend")]
+
+#Omit all NA values
+str(DataCO1)
+complete.cases(DataCO1)
+DataCO1<- na.omit(DataCO1)
+str(DataNO1)
+complete.cases(DataNO1)
+DataNO1<- na.omit(DataNO1)
+str(DataO1)
+complete.cases(DataO1)
+DataO1<- na.omit(DataO1)
+
+#Create Y Vectors
+Y.CO1<- as.matrix(DataCO1$lCO) #lCO
+Y.NO1<- as.matrix(DataNO1$lNOx) #lNO
+Y.O1<- as.matrix(DataO1$lO3) #lO3
+
+#Create X Matrices and solve for b coefficients
+
+#NEW REGRESSION 1-------------------------------------------------------
+
+#Create X Matrices and solve for b coefficients
+X.CO1<- as.matrix(cbind(1,DataCO1$opl1, DataCO1$wkend))
+colnames(X.CO1, do.NULL = FALSE)
+colnames(X.CO1) <- c("Const","MetroOpen","Wkend")
+
+#Solve for b
+i.CO1<-solve(t(X.CO1)%*%(X.CO1)) 
+b.CO1<-(i.CO1)%*%((t(X.CO1)%*%Y.CO1))
+b.hat.CO1<- as.data.frame(cbind(c("Const", "MetroOpen","Wkend"), b.CO1))
+names(b.hat.CO1)<- c("Coeff.", "Est")
+b.hat.CO1
+
+#Find CLUSTERED Standard Error
+res.CO1=as.matrix(Y.CO1-b.CO1[1]-b.CO1[2]*DataCO1$opl1-b.CO1[3]*DataCO1$wkend)
+n.CO1=nrow(DataCO1)
+k.CO1=ncol(X.CO1)
+
+
+#create matrix for looping 
+cluster<- "weekid"
+clus.CO1<- cbind(X.CO1, DataCO1$weekid,res.CO1)
+colnames(clus.CO1)<- c("Const", "MetroOpen","Weekend", "weekid", "res")
+
+#number of clusters
+m.CO1<- dim(table(clus.CO1[,cluster]))
+
+#Adjust degrees of freedom for clusters
+dfc.CO1<- (m.CO1/(m.CO1-1))*((n.CO1-1)/(n.CO1-k.CO1))
+
+uclust.CO1<- matrix(NA, nrow=m.CO1, ncol=k.CO1)
+gs.CO1<- names(table(DataCO1$weekid))
+for(i in 1:m.CO1){
+  uclust.CO1[i,]<- t(matrix(clus.CO1[clus.CO1[,cluster]==gs.CO1[i], k.CO1+2])) %*% clus.CO1[clus.CO1[,cluster]==gs.CO1[i], 1:k.CO1]
+}
+Mid.CO1<-(t(uclust.CO1) %*% uclust.CO1)
+clust.se.CO1<-((i.CO1 %*% Mid.CO1 %*% i.CO1)* dfc.CO1)
+
+St.Err.CO1<-sqrt(diag(clust.se.CO1))
+P.Val.CO1 = rbind(2*pt(abs(b.CO1[1]/St.Err.CO1[1]), dfc.CO1,lower.tail= FALSE),
+                2*pt(abs(b.CO1[2]/St.Err.CO1[2]), dfc.CO1,lower.tail= FALSE),
+                2*pt(abs(b.CO1[3]/St.Err.CO1[3]), dfc.CO1,lower.tail= FALSE))
+b.hat.CO1= cbind(b.hat.CO1, St.Err.CO1, P.Val.CO1)
+names(b.hat.CO1)<- c("Coeff.", "Est", "St.Err", "P-Value")
+b.hat.CO1
+
+#Find R-Sq
+y.hCO1<- mean(Y.CO1)
+SSR.CO1<- sum(res.CO1^2)
+SST.CO1<- sum((Y.CO1-y.hCO1)^2)
+R.SQ.CO1<-1-(SSR.CO1/SST.CO1)
+ADJ.R.SQ.CO1<- 1-(((SSR.CO1)/(n.CO1-k.CO1))/((SST.CO1)/(n.CO1-1)))
+R.SQ.CO1
+ADJ.R.SQ.CO1
+
+
+# NEW REGRESSION 2 -----------NO1-----------------------------------------
+
+X.NO1<- as.matrix(cbind(1,DataNO1$opl1, DataNO1$wkend))
+colnames(X.NO1, do.NULL = FALSE)
+colnames(X.NO1) <- c("Const","MetroOpen","Wkend")
+
+#Solve for b
+i.NO1<-solve(t(X.NO1)%*%(X.NO1)) 
+b.NO1<-(i.NO1)%*%((t(X.NO1)%*%Y.NO1))
+b.hat.NO1<- as.data.frame(cbind(c("Const", "MetroOpen", "Wkend"), b.NO1))
+names(b.hat.NO1)<- c("Coeff.", "Est")
+b.hat.NO1
+
+res.NO1=as.matrix(Y.NO1-b.NO1[1]-b.NO1[2]*DataNO1$opl1-b.NO1[3]*DataNO1$wkend)
+n.NO1=nrow(DataNO1)
+k.NO1=ncol(X.NO1)
+
+#create matrix for looping 
+cluster<- "weekid"
+clus.NO1<- cbind(X.NO1, DataNO1$weekid,res.NO1)
+colnames(clus.NO1)<- c("Const", "MetroOpen","Weekend", "weekid", "res")
+
+#number of clusters
+m.NO1<- dim(table(clus.NO1[,cluster]))
+
+#Adjust degrees of freedom for clusters
+dfc.NO1<- (m.NO1/(m.NO1-1))*((n.NO1-1)/(n.NO1-k.NO1))
+
+uclust.NO1<- matrix(NA, nrow=m.NO1, ncol=k.NO1)
+gs.NO1<- names(table(DataNO1$weekid))
+for(i in 1:m.NO1){
+  uclust.NO1[i,]<- t(matrix(clus.NO1[clus.NO1[,cluster]==gs.NO1[i], k.NO1+2])) %*% clus.NO1[clus.NO1[,cluster]==gs.NO1[i], 1:k.NO1]
+}
+Mid.NO1<-(t(uclust.NO1) %*% uclust.NO1)
+clust.se.NO1<-((i.NO1 %*% Mid.NO1 %*% i.NO1)* dfc.NO1)
+
+St.Err.NO1<-sqrt(diag(clust.se.NO1))
+P.Val.NO1 = rbind(2*pt(abs(b.NO1[1]/St.Err.NO1[1]), dfc.NO1,lower.tail= FALSE),
+                  2*pt(abs(b.NO1[2]/St.Err.NO1[2]), dfc.NO1,lower.tail= FALSE),
+                  2*pt(abs(b.NO1[3]/St.Err.NO1[3]), dfc.NO1,lower.tail= FALSE))
+b.hat.NO1= cbind(b.hat.NO1, St.Err.NO1, P.Val.NO1)
+names(b.hat.NO1)<- c("Coeff.", "Est", "St.Err", "P-Value")
+b.hat.NO1
+
+y.hNO1<- mean(Y.NO1)
+SSR.NO1<- sum(res.NO1^2)
+SST.NO1<- sum((Y.NO1-y.hNO1)^2)
+R.SQ.NO1<-1-(SSR.NO1/SST.NO1)
+ADJ.R.SQ.NO1<- 1-(((SSR.NO1)/(n.NO1-k.NO1))/((SST.NO1)/(n.NO1-1)))
+R.SQ.NO1                
+ADJ.R.SQ.NO1                
+
+
+###NEW REGRESSION 3--------------------------O3------------------------------------
+
+
+X.O1<- as.matrix(cbind(1,DataO1$opl1, DataO1$wkend))
+colnames(X.O1, do.NULL = FALSE)
+colnames(X.O1) <- c("Const","MetroOpen","Wkend")
+
+i.O1<-solve(t(X.O1)%*%(X.O1)) 
+b.O1<-(i.O1)%*%((t(X.O1)%*%Y.O1))
+b.hat.O1<- as.data.frame(cbind(c("Const", "MetroOpen","Wkend"), b.O1))
+names(b.hat.O1)<- c("Coeff.", "Est")
+b.hat.O1
+
+res.O1=as.matrix(Y.O1-b.O1[1]-b.O1[2]*DataO1$opl1)
+n.O1=nrow(DataO1)
+k.O1=ncol(X.O1)
+
+#create matrix for looping 
+cluster<- "weekid"
+clus.O1<- cbind(X.O1, DataO1$weekid,res.O1)
+colnames(clus.O1)<- c("Const", "MetroOpen","Weekend", "weekid", "res")
+
+#number of clusters
+m.O1<- dim(table(clus.O1[,cluster]))
+
+#Adjust degrees of freedom for clusters
+dfc.O1<- (m.O1/(m.O1-1))*((n.O1-1)/(n.O1-k.O1))
+
+uclust.O1<- matrix(NA, nrow=m.O1, ncol=k.O1)
+gs.O1<- names(table(DataO1$weekid))
+for(i in 1:m.O1){
+  uclust.O1[i,]<- t(matrix(clus.O1[clus.O1[,cluster]==gs.O1[i], k.O1+2])) %*% clus.O1[clus.O1[,cluster]==gs.O1[i], 1:k.O1]
+}
+Mid.O1<-(t(uclust.O1) %*% uclust.O1)
+clust.se.O1<-((i.O1 %*% Mid.O1 %*% i.O1)* dfc.O1)
+
+St.Err.O1<-sqrt(diag(clust.se.O1))
+P.Val.O1 = rbind(2*pt(abs(b.O1[1]/St.Err.O1[1]), dfc.O1,lower.tail= FALSE),
+                  2*pt(abs(b.O1[2]/St.Err.O1[2]), dfc.O1,lower.tail= FALSE),
+                  2*pt(abs(b.O1[3]/St.Err.O1[3]), dfc.O1,lower.tail= FALSE))
+b.hat.O1= cbind(b.hat.O1, St.Err.O1, P.Val.O1)
+names(b.hat.O1)<- c("Coeff.", "Est", "St.Err", "P-Value")
+b.hat.O1
+
+
+#GET R-SQ AND ADJ R-SQ
+y.hO1<- mean(Y.O1)
+SSR.O1<- sum(res.O1^2)
+SST.O1<- sum((Y.O1-y.hO1)^2)
+R.SQ.O1<-1-(SSR.O1/SST.O1)
+ADJ.R.SQ.O1<- 1-(((SSR.O1)/(n.O1-k.O1))/((SST.O1)/(n.O1-1)))
+R.SQ.O1
+ADJ.R.SQ.O1
+
+# -------------------------Partial F Test-------------------------------------------
+# Test whether or not weekend is significant
+#Will look at the Resgression on lCO, as this is the most significant one 
+
+#Full Model
+SSR.Full<- SSR.CO
+
+#Restriced Model
+SSR.Rest<-SSR.CO1
+
+R<- 1
+N<-n
+K<-k
+U<-(N-K)
+N
+k
+
+#Calculate F-Statistic, critical value, and P-value 
+
+F.stat<- as.vector(((SSR.Rest-SSR.Full)/R)/((SSR.Full)/(N-K)))
+F.stat<- ((SSR.Full)%/%(N-K))
+
+F.Crit<- qf(.95,R,(N-K))
+F.Crit
+
+
+print("Fstat=")
+print(F.stat)
+print("F Crit Value=")
+print(F.Crit)
+
+
+
+############## CODES FOR GETTING OLS RESULTS ###############
+
+#----------------Original OLS
+#1 Reg on lCO
+b.hat.CO
+R.SQ.CO1
+ADJ.R.SQ.CO1
+
+#2 Reg on lNOx
+b.hat.NO
+R.SQ.NO
+ADJ.R.SQ.NO
+
+#3 Reg on lO3
+b.hat.O
+R.SQ.O
+ADJ.R.SQ.O
+
+#-----------------------Changed OLS
+#1.a Reg on lCO
+b.hat.CO1
+R.SQ.CO1
+ADJ.R.SQ.CO1
+
+#2.a  Reg on lNOx
+b.hat.NO1
+R.SQ.NO1
+ADJ.R.SQ.NO1
+
+#3.a  Reg on lO3
+b.hat.O1
+R.SQ.O1
+ADJ.R.SQ.O1
+
