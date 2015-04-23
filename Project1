@@ -1,0 +1,219 @@
+#Mackenzie Smith
+#Project 1
+#Econ 524
+
+#Takes about 25 minutes to run the whole thing
+#Functions are at bottom labeled C_Matrix(), C_Iterated()
+#You can just run the entire code, then run functions with given years 
+
+
+##PART 1-------Setting up Data
+
+#Collect data from internet
+total<- data.frame()
+for (i in 1960:2010){
+  name<-paste("year",i, sep = "")
+  readfile<-paste("http://homepages.cae.wisc.edu/~dwilson/rsfc/history/howell/cf",i,"gms.txt", sep = "")
+  newfile<-read.fwf(readfile,widths<-c(11,28,4,28,3,20),as.is=TRUE)
+  season<-matrix(i,nrow=nrow(newfile),ncol=1)
+  data1<-cbind(season,newfile)
+  assign(name,newfile)
+  total<- rbind(total,data1)
+}  
+
+#Create vectors and change to characters
+colnames(total)<-c("season","date","awayteam","awayscore","hometeam","homescore","location")
+total$awayteam<-as.character(total$awayteam)
+total$hometeam<-as.character(total$hometeam)
+
+#Take out spaces
+total$awayteam<-gsub(" ","",total$awayteam)
+total$hometeam<-gsub(" ","", total$hometeam)
+
+#Delete tied games
+total$diff<- total$awayscore - total$homescore
+total=total[!(total$diff %in% 0),]
+
+#Create new data frame based on games played by each team 
+teams<-data.frame()
+teams<-total
+for(i in 1:dim(teams)[1]){
+  team=teams$hometeam[i]
+  teams$hometeam[i]<-teams$awayteam[i]
+  teams$awayteam[i]<-team
+  team=teams$homescore[i]
+  teams$homescore[i]<-teams$awayscore[i]
+  teams$awayscore[i]<-team
+  teams$diff[i]<-(0-teams$diff[i])
+}
+big<-rbind(total,teams)
+
+#Count number of games played and eliminate double teams
+all<-cbind(as.numeric(big[,1]),as.character(big[,3]))
+all<-unique(all)
+colnames(all)<-c("year","team")
+
+#Calculate wins, losses, and total games played
+scores<-data.frame(matrix(0,nrow=dim(all),ncol=2))
+colnames(scores)<-c("wins","losses")
+teamdata<-cbind(all,scores)
+for(i in 1:dim(big)[1]){
+  together<-which((teamdata$year==big[i,1]) & (teamdata$team==big[i,3]))
+  if(big[i,]$diff>0){
+    teamdata[together[1],]$wins<-teamdata[together[1],]$wins+1
+  }else{
+    teamdata[together[1],]$losses<-teamdata[together[1],]$losses+1
+  }
+}
+   teamdata<-teamdata[with(teamdata,order(year,team)),]
+
+#create new data frame for d2 teams
+d2<-data.frame(matrix(ncol=4))
+colnames(d2)<-c("year","team","wins","losses")
+for(i in 1:dim(teamdata)[1]){
+  if(teamdata$wins[i] + teamdata$losses[i]<3){
+    d2<-rbind(d2,teamdata[i,])
+  }
+}
+d2<-d2[2:dim(d2)[1],]
+
+#drop all games that are in d2
+d1<-data.frame(big)
+for(i in 1:dim(d2)[1]){
+  new_home<-which((d1$hometeam==d2$team[i]) & (d1$season==d2$year[i]))
+  new_away<-which((d1$awayteam==d2$team[i]) & (d1$season==d2$year[i]))
+  newtogether<-c(new_home,new_away)
+  d1<-d1[-newtogether,]
+}
+big<-d1
+
+#new list of teams only in d1
+all<-data.frame(matrix(,nrow=dim(big),ncol=2))
+all<-cbind(big[,1],big[,3])
+all<-unique(all)
+colnames(all)<-c("year","team")
+scores<-data.frame(matrix(0,nrow=dim(all),ncol=2))
+colnames(scores)<-c("wins","losses")
+
+teamdata<-cbind(all,scores)
+for(i in 1:dim(big)[1]){
+  together<-which((teamdata$year==big[i,1]) & (teamdata$team==big[i,3]))
+  if(big[i,]$diff>0){
+    teamdata[together[1],]$wins<-teamdata[together[1],]$wins+1
+  }else{
+    teamdata[together[1],]$losses<-teamdata[together[1],]$losses+1
+  }
+}
+
+#Create vector of opponents
+opponent=data.frame(matrix(,nrow=dim(all)[1],ncol=1))
+for(i in 1:dim(all)[1]){
+  opp_1<-which((big[,1]==teamdata$year[i]) & big[,3]==(teamdata$team[i]))
+  opp<-big[opp_1,5]
+  opponent[[i,1]]<-list(opp)
+}
+
+#Put the final table together with teams per year 
+team_final<-cbind(teamdata,opponent)
+colnames(team_final)<-c("year","team","wins","losses","opponent")
+
+
+
+#PART 2------------------------------------Colley Matrix
+
+#create new data frame to base function and get years
+C_Matrix<-function(year){
+  year_data<-data.frame()
+  year_data1<-which(team_final$year==year)
+  year_data<-team_final[year_data1,]
+  colnames(year_data)<-c("year","team","wins","losses","opponent")
+  
+#set up matrix
+  colley<-matrix(0, nrow=dim(year_data)[1], ncol=dim(year_data)[1])
+  rownames(colley)<-year_data$team
+  colnames(colley)<-year_data$team
+  opp<-year_data$opponent
+  
+  for(i in 1:dim(colley)[1]){
+    opponents_m<-unlist(opp[i])
+    for(j in 1:length(opponents_m)){
+      opp_1<-opponents_m[j]
+      id<-which(year_data$team==opp_1)
+      colley[i,id[1]]<-colley[i,id[1]]-1
+    }
+    colley[i,i]<-2+(year_data$wins[i]+year_data$losses[i])
+  }
+  
+#create the b vector   
+  b<-matrix(0,ncol=1,nrow=dim(year_data)[1])
+  for(i in 1:dim(b)[1]){
+    b[i,1]<-1+((year_data$wins[i]-year_data$losses[i])/2)
+  }
+  
+#Find the rankings by solving the linear equation  
+  r<-solve(colley)%*%b
+  r<-cbind(rownames(colley),r)
+  colnames(r)<-c("team","rank")
+  r<-r[order(r[,2],decreasing=TRUE),]
+  rownames(r)<=NULL
+  
+  return(r)
+}
+
+#Final function test:
+C_Matrix(1999)
+
+#PART 3------------------------------------------Iterated Method
+
+#Create new matrix to get years 
+C_Iterated<-function(year){
+  data_1<-which(team_final$year==year)
+  year_data<-matrix(0,nrow=length(data_1),ncol=dim(team_final)[2])
+  year_data<-team_final[data_1,]
+  colnames(year_data)<-c("year","team","wins","losses","opponent")  
+  
+  r<-data.frame(rep(0,dim(year_data)[1]))
+  colnames(r)<-c("rank")
+  year_data<-cbind(year_data,r)
+  final_rank<-year_data$rank
+  year_wins<-year_data$wins
+  
+#Create variables and solve our equation to get rankings    
+  k=1
+  repeat{
+    for(i in 1:dim(year_data)[1]){
+      eff_w<-year_data$wins[i]
+      act_w<-year_wins[i]
+      losses<-year_data$losses[i]
+      total<-act_w+losses
+      year_data$rank[i]<-(1+eff_w)/(2+total)
+    }
+    opponent<-year_data$opponent
+    for(i in 1:dim(year_data)[1]){
+      opp_m<-unlist(opponent[i])
+      opp_rank<-numeric(length(opp_m))
+      for(j in 1:length(opp_m)){
+        opp1<-opp_m[j]
+        id<-which(year_data$team==opp1)
+        opp_rank[j]<-year_data[id[1],6]
+      }
+      year_data$wins[i]<-((year_wins[i]-year_data$losses[i])/2)+sum(opp_rank)
+  }
+  rank_change<-matrix(,ncol=1,nrow=dim(year_data))
+  rank_change<-abs(final_rank - year_data$rank)
+  k<-max(rank_change)
+  final_rank<-year_data$rank
+  if(max(k<1/100000))
+    { break }
+  } 
+teams<-year_data$team
+rank<-year_data$rank
+r<-year_data[,c(2,6)]
+r<-r[order(r[,2],decreasing=TRUE),]
+
+return(r)  
+}
+
+#Final function test:
+C_Iterated(1999)
+
