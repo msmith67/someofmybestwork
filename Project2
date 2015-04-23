@@ -1,0 +1,232 @@
+#Mackenzie Smith
+#Project 2
+#Econ 524
+
+
+#Read in dataset
+crime<-read.csv(file="crime.csv", head=TRUE, sep=",")
+
+#################################### Part 1 ####################################
+#Create new variables based on log
+crime$ln.crime.rate<- log(crime$crimerate)
+crime$ln.police<-log(crime$police)
+crime$ln.un<-log(crime$un)
+crime$ln.emp<-log(crime$emp)
+crime$ln.ymale<-log(crime$ymale)
+crime$ln.white<-log(crime$white)
+
+#Run log-log regression
+Reg1<-lm(ln.crime.rate~ ln.police + ln.un + ln.emp + ln.ymale + ln.white, data=crime)
+summary(Reg1)
+
+#################################### Part 2 ####################################
+#Create new data set with variables
+crime1<-data.frame(crime$week, crime$borough, crime$ln.crime.rate, crime$ln.police, crime$ln.un, crime$ln.emp, crime$ln.ymale, crime$ln.white)
+colnames(crime1)<-c("week","borough","ln.crime.rate","ln.police","ln.un","ln.emp","ln.ymale","ln.white")
+
+#Order by week
+crime1<- crime1[order(crime1$week),]
+
+#Difference 
+week<-as.matrix(crime1$week[1:1664])
+borough<-as.matrix(crime1$borough[1:1664])
+d.ln.crime.rate<-as.matrix(diff(crime1$ln.crime.rate,lag=1664))
+d.ln.police<-as.matrix(diff(crime1$ln.police,lag=1664))
+d.ln.un<-as.matrix(diff(crime1$ln.un,lag=1664))
+d.ln.emp<-as.matrix(diff(crime1$ln.emp,lag=1664))
+d.ln.ymale<-as.matrix(diff(crime1$ln.ymale,lag=1664))
+d.ln.white<-as.matrix(diff(crime1$ln.white,lag=1664))
+#Create new data frame based off of differences
+crime.diff<-data.frame(cbind(week, borough, d.ln.crime.rate, d.ln.police, d.ln.un, d.ln.emp, d.ln.ymale, d.ln.white))
+colnames(crime.diff)<-c("week", "borough", "d.ln.crime.rate","d.ln.police","d.ln.un","d.ln.emp","d.ln.ymale","d.ln.white")
+
+#Run new differenced regression(2)
+Reg2<-lm(d.ln.crime.rate ~ d.ln.police + d.ln.un + d.ln.emp + d.ln.ymale + d.ln.white, data=crime.diff)
+summary(Reg2)
+
+#################################### Part 3 ####################################
+
+#Create dummy variables for week 2:52
+crime.diff$week.id<-as.factor(crime.diff$week)
+
+#Run regression(3) with week dummy variables 
+Reg3<-lm(d.ln.crime.rate ~ d.ln.police + d.ln.un + d.ln.emp + d.ln.ymale + d.ln.white + week.id, data=crime.diff)
+summary(Reg3)
+
+#################################### Part 4 ####################################
+
+#create new data frame based on variables of interest
+crime4<-data.frame(crime$week, crime$borough, crime$police)
+crime.po<-subset(crime4, crime.borough %in% c("1","2","3","6","14"))
+colnames(crime.po)<-c("week","borough","police")
+#Avg Police hours for year 2
+crime.avg.2<-subset(crime.po, week %in% c("80","81","82","83","84","85"))
+Po.Tr.Y2<-aggregate(crime.avg.2$police, by=list(crime.avg.2$week), FUN=mean)
+colnames(Po.Tr.Y2)<-c("week","Police_Treated_Year2")
+#Avg Police hours for year 1
+crime.avg.1<-subset(crime.po, week %in% c("28","29","30","31","32","33"))
+Po.Tr.Y1<-aggregate(crime.avg.1$police, by=list(crime.avg.1$week), FUN=mean)
+colnames(Po.Tr.Y1)<-c("week","Police_Treated_Year1")
+
+#Create matrix for other 27 boroughs
+crime4<-data.frame(crime$week, crime$borough, crime$police)
+t.1<-crime4[313:520,1:3]
+t.2<-crime4[625:1352,1:3]
+t.3<-crime4[1457:3328,1:3]
+Treated.1=data.frame(rbind(t.1,t.2,t.3))
+#Avg Police Contol hours for year 2
+crime.avg.control<-subset(Treated.1, crime.week %in% c("80","81","82","83","84","85"))
+Po.Cont.Y2<-aggregate(crime.avg.control$crime.police, by=list(crime.avg.control$crime.week), FUN=mean)
+colnames(Po.Cont.Y2)<-c("week","Police_Control_Year2")
+#Avg Police Control hours for year 1
+crime.avg.control1<-subset(Treated.1, crime.week %in% c("28","29","30","31","32","33"))
+Po.Cont.Y1<-aggregate(crime.avg.control1$crime.police, by=list(crime.avg.control1$crime.week), FUN=mean)
+colnames(Po.Cont.Y1)<-c("week","Police_Control_Year1")
+
+#Final data frame with yearly averages
+Pol.Avg<-data.frame(cbind(Po.Tr.Y1$Police_Treated_Year1,Po.Tr.Y2$Police_Treated_Year2,Po.Cont.Y1$Police_Control_Year1,Po.Cont.Y2$Police_Control_Year2))
+colnames(Pol.Avg)<-c("Police_Treated_Year1","Police_Treated_Year2","Police_Control_Year1","Police_Control_Year2")
+
+#Create differences
+Pol_Treated_Diff<-(Pol.Avg$Police_Treated_Year2 - Pol.Avg$Police_Treated_Year1)
+Pol_Control_Diff<-(Pol.Avg$Police_Control_Year2 - Pol.Avg$Police_Control_Year1)
+
+#Difference in Difference
+Police_DinD<-data.frame(Pol_Treated_Diff-Pol_Control_Diff)
+Pol_Diff<- data.frame(cbind(Pol_Treated_Diff, Pol_Control_Diff, Police_DinD))
+colnames(Pol_Diff)<-c("Pol_Treated_Diff", "Pol_Control_Diff", "Police_DinD")
+Police_DinD.Avg<-colMeans(Police_DinD,6,1)
+Police_DinD.Avg
+
+#Graphs
+Po.graph<-crime.po
+po.graph.avg<-aggregate(Po.graph$police, by=list(Po.graph$week), FUN=mean)
+colnames(po.graph.avg)<-c("week","Police.Avg.Treated")
+Po.Tr.Y2<-aggregate(crime.avg.2$police, by=list(crime.avg.2$week), FUN=mean)
+Po.graph1<-Treated.1
+po.graph1.avg<-aggregate(Po.graph1$crime.police, by=list(Po.graph1$crime.week), FUN=mean)
+colnames(po.graph1.avg)<-c("week","Police.Avg.Control")
+Police.Avg.Treated<-po.graph.avg$Police.Avg.Treated
+Police.Avg.Control<-po.graph1.avg$Police.Avg.Control
+Police.Avg.Treated.NM<-(Police.Avg.Treated/(0.14415547))
+Police.Avg.Control.NM<-(Police.Avg.Control)/0.07173575
+
+#Create Plot
+plot(c(0,104),c(0,2), type="n", ylab="Average Per Capita", xlab="Week") 
+title(main="Normalized Police Per Capita Treated Vs. Control", col.main="blue", font.main=4)
+lines(Police.Avg.Treated.NM, col="red")
+lines(Police.Avg.Control.NM, col="blue")
+legend("bottomleft", c("Treated","Control"),cex=.8, col=c("red","blue"), ncol=2, lty=1:1)
+
+#################################### Part 5 ####################################
+
+crime5<-data.frame(crime$week,crime$borough,crime$crimerate)
+crime.cr<-subset(crime5, crime.borough %in% c("1","2","3","6","14"))
+colnames(crime.cr)<-c("week","borough","crimerate")
+#Avg Crimerate for year 2
+crime.cr.2<-subset(crime.cr, week %in% c("80","81","82","83","84","85"))
+Cr.Tr.Y2<-aggregate(crime.cr.2$crimerate, by=list(crime.cr.2$week), FUN=mean)
+colnames(Cr.Tr.Y2)<-c("week","Crimerate_Treated_Year2")
+#Avg Police hours for year 1
+crime.cr.1<-subset(crime.cr, week %in% c("28","29","30","31","32","33"))
+Cr.Tr.Y1<-aggregate(crime.cr.1$crimerate, by=list(crime.cr.1$week), FUN=mean)
+colnames(Cr.Tr.Y1)<-c("week","Crimerate_Treated_Year1")
+
+#Create matrix for other 27 boroughs
+crime5<-data.frame(crime$week, crime$borough, crime$crimerate)
+c.1<-crime5[313:520,1:3]
+c.2<-crime5[625:1352,1:3]
+c.3<-crime5[1457:3328,1:3]
+Treated.cr=data.frame(rbind(c.1,c.2,c.3))
+#Avg Crimerate Contol hours for year 2
+crime.cr.control<-subset(Treated.cr, crime.week %in% c("80","81","82","83","84","85"))
+Cr.Cont.Y2<-aggregate(crime.cr.control$crime.crimerate, by=list(crime.cr.control$crime.week), FUN=mean)
+colnames(Cr.Cont.Y2)<-c("week","Crimerate_Control_Year2")
+#Avg Crimerate Control hours for year 1
+crime.cr.control1<-subset(Treated.cr, crime.week %in% c("28","29","30","31","32","33"))
+Cr.Cont.Y1<-aggregate(crime.cr.control1$crime.crimerate, by=list(crime.cr.control1$crime.week), FUN=mean)
+colnames(Cr.Cont.Y1)<-c("week","Crimerate_Control_Year1")
+
+#Final data frame with yearly averages
+Cr.Avg<-data.frame(cbind(Cr.Tr.Y1$Crimerate_Treated_Year1,Cr.Tr.Y2$Crimerate_Treated_Year2,Cr.Cont.Y1$Crimerate_Control_Year1,Cr.Cont.Y2$Crimerate_Control_Year2))
+colnames(Cr.Avg)<-c("Cr_Treated_Year1","Cr_Treated_Year2","Cr_Control_Year1","Cr_Control_Year2")
+
+#Create differences
+Cr_Treated_Diff<-(Cr.Avg$Cr_Treated_Year2 - Cr.Avg$Cr_Treated_Year1)
+Cr_Control_Diff<-(Cr.Avg$Cr_Control_Year2 - Cr.Avg$Cr_Control_Year1)
+
+#Difference in Difference
+Crimerate_DinD<-data.frame(Cr_Treated_Diff-Cr_Control_Diff)
+Cr_Diff<- data.frame(cbind(Cr_Treated_Diff, Cr_Control_Diff, Crimerate_DinD))
+colnames(Cr_Diff)<-c("Cr_Treated_Diff", "Cr_Control_Diff", "Cr_DinD")
+Crimerate_DinD.Avg<-colMeans(Crimerate_DinD,6,1)
+Crimerate_DinD.Avg
+
+#Graph
+#Avg data for treated
+cr.graph<-crime.cr
+cr.graph.avg<-aggregate(cr.graph$crimerate, by=list(cr.graph$week), FUN=mean)
+colnames(cr.graph.avg)<-c("week","Crimerate.Avg.Treated")
+#Avg data for control
+cr.graph1<-Treated.cr
+cr.graph1.avg<-aggregate(cr.graph1$crime.crimerate, by=list(cr.graph1$crime.week), FUN=mean)
+colnames(cr.graph.avg)<-c("week","Crimerate.Avg.Treated")
+colnames(cr.graph1.avg)<-c("week","Crimerate.Avg.Control")
+#Normalize Data
+Crimerate.Avg.Treated.NM<-(cr.graph.avg$Crimerate.Avg.Treated)/0.003721808
+Crimerate.Avg.Control.NM<-(cr.graph1.avg$Crimerate.Avg.Control)/0.001953365
+
+#Create plot
+plot(c(0,104),c(0,2), type="n", ylab="Average Crime Rate", xlab="Week") 
+title(main="Normalized Average Crime Rate Treated Vs. Control", col.main="blue", font.main=4)
+lines(Crimerate.Avg.Treated.NM,col="red")
+lines(Crimerate.Avg.Control.NM,col="blue")
+legend("bottomleft", c("Treated","Control"),cex=.8, col=c("red","blue"), ncol=2, lty=1:1)
+
+
+#################################### Part 6 ####################################
+
+crime6<-data.frame(cbind(week,borough,d.ln.un, d.ln.emp, d.ln.ymale, d.ln.white))
+week.id<-as.factor(crime6$X1)
+ln.police<-log(crime$police)
+d.ln.police<-as.matrix(diff(crime1$ln.police,lag=1664))
+#Create new data frame with values of interest
+crime6<-cbind(crime6, d.ln.police, week.id)
+colnames(crime6)<-c("week","borough","d.ln.un","d.ln.emp","d.ln.ymale","d.ln.white","d.ln.police","week.id")
+
+#Create new Dummy variables
+#policy: weeks 28-33 dummy variable
+crime6$policy <- ifelse(crime6$week %in% c("28","29","30","31","32","33"), "1", "0")
+#policy_threat: Weeks 28-33 and 5 borroughs
+crime6$policy_threat <- ifelse(crime6$week %in% c("28","29","30","31","32","33") & crime6$borough %in% c("1","2","3","6","14"), "1", "0")
+#post
+crime6$post <- ifelse(crime6$week>33,"1", "0")
+#post_threat1
+crime6$post_threat1 <- ifelse(crime6$week>33 & crime6$borough %in% c("1","2","3","6","14"),"1", "0")
+  
+#Run Regression
+Reg4<-lm(d.ln.police ~ d.ln.emp + d.ln.un +d.ln.ymale + d.ln.white + policy + policy_threat + post + post_threat1 + week.id, data=crime6)
+summary(Reg4)
+
+#################################### Part 7 ####################################
+
+crime7<-data.frame(cbind(week,borough,d.ln.crime.rate, d.ln.un, d.ln.emp, d.ln.ymale, d.ln.white))
+week.id.7<-as.factor(crime7$X1)
+
+#Create new data frame with values of interest
+crime7<-cbind(crime7, week.id.7)
+colnames(crime7)<-c("week","borough","d.ln.crime.rate","d.ln.un","d.ln.emp","d.ln.ymale","d.ln.white","week.id")
+
+#Create new Dummy variables
+#policy: weeks 28-33 dummy variable
+crime7$policy <- ifelse(crime7$week %in% c("28","29","30","31","32","33"), "1", "0")
+#policy_threat: Weeks 28-33 and 5 borroughs
+crime7$policy_threat <- ifelse(crime7$week %in% c("28","29","30","31","32","33") & crime7$borough %in% c("1","2","3","6","14"), "1", "0")
+#post
+crime7$post <- ifelse(crime7$week>33,"1", "0")
+#post_threat1
+crime7$post_threat1 <- ifelse(crime7$week>33 & crime7$borough %in% c("1","2","3","6","14"),"1", "0")
+
+#Run Regression
+Reg5<-lm(d.ln.crime.rate ~ d.ln.emp + d.ln.un +d.ln.ymale + d.ln.white + policy + policy_threat + post + post_threat1 + week.id, data=crime7)
+summary(Reg5)
