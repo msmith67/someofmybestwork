@@ -1,0 +1,191 @@
+#Mackenzie Smith
+#Quiz 2
+
+
+#Problem 1
+library(DBI)
+library(RSQLite)
+drv <- dbDriver("SQLite")
+con<-dbConnect(drv,"/Users/Kenz/Downloads/chinook.db")
+dbListTables(con)
+dbListFields(con,"Playlist")
+dbListFields(con,"Album")
+dbListFields(con,"Customer")
+dbListFields(con,"Invoice")
+dbListFields(con,"PlaylistTrack")
+dbListFields(con,"Track")
+head(dbReadTable(con, "InvoiceLine"))
+
+#2 
+dbGetQuery
+db1<-((dbGetQuery(con,"select PlaylistID,Name from Playlist")))
+
+#3
+db2<-((dbGetQuery(con,"select PlaylistID, Playlist.Name as PlaylistName, Track.Name as TrackName, Track.Milliseconds as TrackMilliseconds  
+from Playlist inner join PlaylistTrack using (PlaylistID) 
+inner join Track using (TrackID)")))
+
+#4
+db3<-((dbGetQuery(con,"select PlaylistID, Playlist.Name as PlaylistName, Track.Name as TrackName, Track.Milliseconds as TrackMilliseconds  
+from Playlist inner join PlaylistTrack using (PlaylistID) 
+inner join Track using (TrackID) 
+inner join Album using (AlbumID) 
+inner join Artist using (ArtistID) where Artist.Name='Pink Floyd'")))
+
+#5
+select sum(Track.Milliseconds) from Track 
+
+db4<-((dbGetQuery(con,"select PlaylistID, Playlist.Name as PlaylistName, Track.Milliseconds as TrackMilliseconds  
+from Playlist inner join PlaylistTrack using (PlaylistID) 
+inner join Track using (TrackID) 
+inner join Album using (AlbumID) 
+sum(Track.Milliseconds) group by PlaylistID")))
+
+
+
+###Problem2
+
+d<-read.csv("pddata.csv")
+d <- d[order(d$round,d$id),]
+
+#1. 
+otherlag = lag(ts(d$otherchoice),-21)
+d2 <- data.frame(ts.union(ts(d),otherlag))
+colnames(d2)<- c("choice","otherchoice","id","payoff","round","pa","pb","econ","otherlag")
+
+#2
+result1<- lm(choice~ econ + otherlag, data=d)
+result1<-summary(result1)
+
+#3
+result2<- glm(choice~ econ + otherlag,family=binomial(link="logit"), data=d)
+ll2<-logLik(result2)
+
+#4
+d2 <- d2[-which(is.na(d2$otherlag)),]
+x <- as.matrix(d2[,8:9])
+x <- cbind(integer(length(d2$otherlag))+1,x)
+y <- as.vector(d2[,1])
+b <- numeric(3)
+
+#Log Likelihood Function 
+ll_logit <- function(b){
+  p <- pnorm((exp(x%*%b)/(1+(exp(x%*%b)))),log.p=TRUE)
+  p2 <- pnorm((exp(x%*%b)/(1+(exp(x%*%b)))),log.p=TRUE)  
+  r <- -sum(y*p+(1-y)*p2) #Take negative of max to find min
+  return(r) #this is negative LL
+}
+
+
+#5
+
+#Create Gradient function
+gr<-function(b){
+  p<-pnorm((exp(x%*%b)/(1+(exp(x%*%b)))))
+  d<- dnorm((exp(x%*%b)/(1+(exp(x%*%b)))))
+  return(as.vector(t(x) %*% (y*d/p + (1-y)*(-d)/1-p)))
+}
+
+h<- function(b){
+  p<- pnorm((exp(x%*%b)/(1+(exp(x%*%b)))))
+  d<- dnorm((exp(x%*%b)/(1+(exp(x%*%b)))))
+  e<- matrix(numeric(25), nrow=5) #Create empty matrix for e
+  for( i in 1: length(y)){
+    if(y[i]==1){
+      e<- e + as.numeric(d[i]/p[i]*(d[i]/p[i]+x[i,] %*% b))*(x[i,]%*%t(x[i,]))
+    }else{
+      f<- -d[i]/(1-p[i])
+      g<- x[i,] %*% b
+      g<- f*(f+g)
+      e<- e+as.numeric(g)*(x[i,]%*%t(x[i,]))
+    }
+  }
+  return (-e)
+}
+
+
+
+result4 <- nlm(ll_logit,b,hessian=TRUE)
+standard errors<- sqrt(diag(solve(result$hessian)))
+
+
+
+###Problem 3
+
+nd<-read.csv("pddata.csv")
+nd <- d[order(d$round,d$id),]
+
+sw = integer(2000)
+swcount=0
+for (i in 1:2000){
+  if(nd$round[i]==1){
+    sw[i]=0
+  } else {
+    sw[i]=as.integer(nd$choice[i]!=nd$choice[i-1])
+    if(sw[i]>0){
+      swcount=swcount+1
+    } 
+    
+  }
+}
+
+library(doBy)
+nd <- cbind(nd,sw)
+ndsum <-summaryBy(sw ~ id,FUN=sum,data=nd)
+nd <- cbind(nd,integer(2000))
+names(nd) <-c(names(nd)[1:9],"swcount")
+
+for(i in 1:2000){
+  nd$swcount[i] <- ndsum[which(nd$id[i]==ndsum$id),2]
+}
+
+nd <- nd[-which(nd$swcount==0),]
+
+d <- nd
+d$aandloss = (d$choice+1)*as.integer(d$loss>0)
+d$bandloss = (d$choice)*as.integer(d$loss>0)
+d$bandnoloss = (d$choice)*as.integer(d$loss==0)
+d$ch = d$choice
+
+d <- d[order(d$round,d$id),]
+
+aandlosslag = lag(ts(d$aandloss),-18)
+bandlosslag = lag(ts(d$bandloss),-18)
+bandnolosslag = lag(ts(d$bandnoloss),-18)
+earnlag = lag(ts(d$earn),-18)
+d2 <- data.frame(ts.union(ts(d),aandlosslag,bandlosslag,bandnolosslag,earnlag))
+names(d2) <- c(names(d),"aandlosslag","bandlosslag","bandnolosslag","earnlag")
+
+
+ll_rl <- function(b){
+  choicea = nd$choice+1
+  choiceb = nd$choice
+  aa=numeric(3900)
+  ab=numeric(3900)
+  for (i in 1:3900){
+    if(nd$round[i]==1){
+      aa[i] = 0
+      ab[i] = 0
+    } else{
+      range = 0.15*nd$high[i]+3*(1-nd$high[i])+0.02*nd$lowcost[i]+0.03*(1-nd$lowcost[i])
+      aa[i] = aa[i-1]+choicea[i-1]*((range-nd$loss[i-1]/100)/range)
+      ab[i] = ab[i-1]+choiceb[i-1]*((range-0.02*nd$lowcost[i]-0.03*(1-nd$lowcost[i])-nd$loss[i-1]/100)/range)
+    }
+    
+  }
+  r =  b[1]* (choicea * aa) + b[1]*(choiceb * ab) - log(exp(b[1]*aa)+exp(b[1]*ab))
+  return(-sum(r))
+}
+
+
+b <- numeric(3)
+b[2]<- 0.5
+b[1]<- 10
+result <- maxLik(ll_rl,start=b,method="NR")
+summary(result)
+
+result4 <- nlm(ll_rl,b,hessian=TRUE,gradtol=1e-8,steptol=1e-8))
+serror <- sqrt(diag(solve(result$hessian)))
+
+
+
